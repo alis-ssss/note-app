@@ -1,19 +1,63 @@
+import os
 import sqlite3
 from flask import g
-import os
 
-def get_db_path():
-    """Получить путь к базе данных"""
-    if 'RENDER' in os.environ:
-        # На Render используем постоянное хранилище
-        return '/etc/notes.db'
-    return 'notes.db'
+
+def _is_test_mode():
+    """Check if running in Flask test mode"""
+    from flask import current_app
+    if current_app and current_app.config.get('TESTING'):
+        return True
+    return False
+
+
+def is_postgres():
+    if _is_test_mode():
+        return False
+    return bool(os.environ.get('DATABASE_URL'))
+
+
+def get_db():
+    if 'db' not in g:
+        from flask import current_app
+        app = current_app
+
+        if app and app.config.get('DATABASE'):
+            g.db = sqlite3.connect(app.config['DATABASE'], detect_types=sqlite3.PARSE_DECLTYPES)
+            g.db.row_factory = sqlite3.Row
+        elif is_postgres():
+            import psycopg2
+            g.db = psycopg2.connect(os.environ['DATABASE_URL'])
+        else:
+            g.db = sqlite3.connect('notes.db', detect_types=sqlite3.PARSE_DECLTYPES)
+            g.db.row_factory = sqlite3.Row
+    return g.db
+
+
+def execute_db(query, params=None):
+    db = get_db()
+    if not is_postgres():
+        query = query.replace('%s', '?')
+    if params is not None:
+        return db.execute(query, params)
+    return db.execute(query)
+
 
 def init_db():
-    """Инициализировать базу данных"""
     db = get_db()
-    with db:
-        db.execute('''
+    if is_postgres():
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS notes (
+                id SERIAL PRIMARY KEY,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                tags TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+    else:
+        db.execute("""
             CREATE TABLE IF NOT EXISTS notes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
@@ -22,37 +66,17 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-        ''')
-        
-        # Создаем триггер для обновления updated_at
-        db.execute('''
-            CREATE TRIGGER IF NOT EXISTS update_notes_timestamp 
-            AFTER UPDATE ON notes
-            BEGIN
-                UPDATE notes 
-                SET updated_at = CURRENT_TIMESTAMP 
-                WHERE id = NEW.id;
-            END
-        ''')
+        """)
+    db.commit()
 
-def get_db():
-    """Получить соединение с базой данных"""
-    if 'db' not in g:
-        g.db = sqlite3.connect(
-            get_db_path(),
-            detect_types=sqlite3.PARSE_DECLTYPES
-        )
-        g.db.row_factory = sqlite3.Row
-    return g.db
 
 def close_db(e=None):
-    """Закрыть соединение с базой данных"""
     db = g.pop('db', None)
     if db is not None:
         db.close()
 
+
 def init_app(app):
-    """Инициализировать приложение с базой данных"""
     app.teardown_appcontext(close_db)
     with app.app_context():
         init_db()
