@@ -39,7 +39,8 @@ def get_db():
 def execute_db(query, params=None):
     db = get_db()
     if is_postgres():
-        cursor = db.cursor()
+        from psycopg2.extras import RealDictCursor
+        cursor = db.cursor(cursor_factory=RealDictCursor)
         if params is not None:
             cursor.execute(query, params)
         else:

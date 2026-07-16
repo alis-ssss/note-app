@@ -26,7 +26,7 @@ class Note:
                 'INSERT INTO notes (title, content, tags) VALUES (%s, %s, %s) RETURNING id',
                 (title, content, tags_str)
             )
-            note_id = cursor.fetchone()[0]
+            note_id = cursor.fetchone()['id']
             db.commit()
         else:
             cursor = execute_db(
