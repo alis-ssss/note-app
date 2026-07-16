@@ -27,7 +27,9 @@ def get_db():
             g.db.row_factory = sqlite3.Row
         elif is_postgres():
             import psycopg2
+            from psycopg2.extras import RealDictCursor
             g.db = psycopg2.connect(os.environ['DATABASE_URL'])
+            g.db.cursor_factory = RealDictCursor
         else:
             g.db = sqlite3.connect('notes.db', detect_types=sqlite3.PARSE_DECLTYPES)
             g.db.row_factory = sqlite3.Row
