@@ -1,7 +1,7 @@
 import os
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from database import init_app, get_db, is_postgres
+from database import init_app, get_db, is_postgres, execute_db
 from models import Note
 from dotenv import load_dotenv
 
@@ -34,11 +34,7 @@ def index():
 def health_check():
     """Проверка работоспособности API"""
     try:
-        db = get_db()
-        if is_postgres():
-            db.execute('SELECT 1')
-        else:
-            db.execute('SELECT 1')
+        execute_db('SELECT 1')
         return jsonify({
             'status': 'healthy',
             'database': 'connected',

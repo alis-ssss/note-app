@@ -27,6 +27,7 @@ class Note:
                 (title, content, tags_str)
             )
             note_id = cursor.fetchone()[0]
+            db.commit()
         else:
             cursor = execute_db(
                 'INSERT INTO notes (title, content, tags) VALUES (%s, %s, %s)',
