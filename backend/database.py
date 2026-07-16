@@ -36,17 +36,25 @@ def get_db():
 
 def execute_db(query, params=None):
     db = get_db()
-    if not is_postgres():
+    if is_postgres():
+        cursor = db.cursor()
+        if params is not None:
+            cursor.execute(query, params)
+        else:
+            cursor.execute(query)
+        return cursor
+    else:
         query = query.replace('%s', '?')
-    if params is not None:
-        return db.execute(query, params)
-    return db.execute(query)
+        if params is not None:
+            return db.execute(query, params)
+        return db.execute(query)
 
 
 def init_db():
     db = get_db()
     if is_postgres():
-        db.execute("""
+        cursor = db.cursor()
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS notes (
                 id SERIAL PRIMARY KEY,
                 title TEXT NOT NULL,
@@ -56,6 +64,7 @@ def init_db():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        db.commit()
     else:
         db.execute("""
             CREATE TABLE IF NOT EXISTS notes (
