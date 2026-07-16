@@ -9,7 +9,7 @@
 | Метод   | Эндпоинт                | Описание                     |
 |---------|------------------------|------------------------------|
 | GET     | `/api/health`          | Проверка работоспособности   |
-| GET     | `/api/notes`           | Получить все заметки         |3
+| GET     | `/api/notes`           | Получить все заметки         |
 | GET     | `/api/notes/<id>`      | Получить заметку по ID       |
 | POST    | `/api/notes`           | Создать новую заметку        |
 | PUT     | `/api/notes/<id>`      | Обновить заметку             |
@@ -18,21 +18,25 @@
 
 ## Технологии
 
-| Технология       | Назначение                             |
-|------------------|----------------------------------------|
-| Python           | Язык программирования backend          |
-| Flask            | Веб-фреймворк                          |
-| SQLite           | База данных                            |
-| Flake8           | Линтер Python                          |
-| Pytest           | Тестирование Python                    |
-| Node.js          | Среда выполнения JavaScript            |
-| React            | UI библиотека                          |
-| Tailwind CSS     | CSS фреймворк                          |
-| ESLint           | Линтер JavaScript                      |
-| Axios            | HTTP клиент                            |
-| Docker           | Контейнеризация                        |
-| Docker Compose   | Оркестрация контейнеров                |
-| GitHub Actions   | CI/CD автоматизация                    |
+| Технология         | Назначение                             |
+|--------------------|----------------------------------------|
+| Python             | Язык программирования backend          |
+| Flask              | Веб-фреймворк                          |
+| Gunicorn           | WSGI-сервер                            |
+| SQLite / PostgreSQL| База данных (локально / Railway)       |
+| psycopg2           | PostgreSQL-драйвер                     |
+| Flake8             | Линтер Python                          |
+| Pytest             | Тестирование Python                    |
+| Node.js            | Среда выполнения JavaScript            |
+| React              | UI библиотека                          |
+| Tailwind CSS       | CSS фреймворк                          |
+| ESLint             | Линтер JavaScript                      |
+| Axios              | HTTP клиент                            |
+| Nginx              | Прокси-сервер для frontend             |
+| Docker             | Контейнеризация                        |
+| Docker Compose     | Оркестрация контейнеров                |
+| GitHub Actions     | CI автоматизация                       |
+| Railway            | Хостинг и CD (Autodeploy)              |
 
 ## Запуск локально
 
@@ -44,7 +48,8 @@ python -m venv venv
 source venv/bin/activate  # Linux/Mac
 # venv\Scripts\activate   # Windows
 pip install -r requirements.txt
-python app.py
+gunicorn --bind 0.0.0.0:5000 --timeout 120 app:app
+# или: python app.py
 ```
 
 Сервер будет доступен на `http://localhost:5000`.
@@ -67,9 +72,14 @@ cd 1
 docker-compose up --build
 ```
 
-После сборки:
-- Frontend: `http://localhost:3000`
+После сборки будет запущено 3 сервиса:
+- **PostgreSQL 16** — база данных (`notes_db`)
+- **Backend** — Flask + Gunicorn на `http://localhost:5000`
+- **Frontend** — React + Nginx на `http://localhost:3000`
+
+Проверка:
 - Backend API: `http://localhost:5000/api/health`
+- Frontend: `http://localhost:3000`
 
 ## CI/CD
 
@@ -85,45 +95,53 @@ docker-compose up --build
 3. **Docker Build** — сборка Docker-образов backend и frontend
 4. **Integration Validation** — проверка структуры проекта
 
-### CD Pipeline
+### CD Pipeline — Railway Autodeploy
 
-Файл: `.github/workflows/cd.yml`
+Деплой происходит автоматически через **Railway Autodeploy** после merge в `main`.
 
-Запускается при **merge в ветку `main`** или вручную через `workflow_dispatch`.
+**Механизм:**
+1. Merge PR в `main` → запуск **CI** (GitHub Actions)
+2. Railway ожидает успешного CI (**Wait for CI**)
+3. После успеха — **Autodeploy** backend и frontend
+4. Railway проверяет работоспособность (healthcheck `/api/health`)
+5. Сервисы доступны по публичным URL
 
-**Этапы CD:**
-1. Сборка Docker-образов с тегом коммита
-2. Локальное тестирование деплоя (запуск контейнеров, healthcheck)
-3. Генерация отчета о деплое (`deployment-report.md`)
-4. Сохранение отчета как артефакта (доступен 30 дней)
+**Сервисы на Railway:**
+- **PostgreSQL** — база данных (авто-инжект `DATABASE_URL`)
+- **Backend** — Flask + Gunicorn
+- **Frontend** — React + Nginx
+
+> Переменные окружения задаются через интерфейс Railway (не `.env`).
 
 ## Переменные окружения
 
-### Backend (`.env`)
+### Backend (`.env` — локально; Railway → Variables)
 
-| Переменная      | Описание                    | Значение по умолчанию    |
-|-----------------|-----------------------------|--------------------------|
-| `FLASK_ENV`     | Режим запуска Flask         | `development`            |
-| `PORT`          | Порт сервера                | `5000`                   |
-| `DATABASE_URL`  | Путь к базе данных SQLite   | `sqlite:///notes.db`     |
+| Переменная      | Описание                          | Значение по умолчанию                              |
+|-----------------|-----------------------------------|----------------------------------------------------|
+| `FLASK_ENV`     | Режим запуска Flask               | `development`                                      |
+| `PORT`          | Порт сервера                      | `5000`                                             |
+| `DATABASE_URL`  | URL базы данных                   | `postgresql://notes_user:notes_pass@db:5432/notes_db` |
 
-### Frontend (встроены в `docker-compose.yml`)
+### Frontend (локально — `.env` / Railway → Variables)
 
-| Переменная           | Описание                          | Значение по умолчанию           |
-|----------------------|-----------------------------------|---------------------------------|
-| `REACT_APP_API_URL`  | Базовый URL для API-запросов      | `http://localhost:5000/api`     |
+| Переменная           | Описание                          | Значение                         |
+|----------------------|-----------------------------------|----------------------------------|
+| `REACT_APP_API_URL`  | Базовый URL для API (через Nginx) | `/api`                           |
+| `API_URL`            | URL backend для Nginx proxy_pass  | `http://localhost:5000`          |
 
 ## Структура проекта
 
 ```
 1/
-├── backend/                  # Python Flask API
+├── backend/                  # Python Flask + Gunicorn API
 │   ├── app.py                # Основное приложение Flask (REST endpoints)
-│   ├── database.py           # SQLite инициализация и подключение
+│   ├── database.py           # SQLite/PostgreSQL инициализация и подключение
 │   ├── models.py             # Модель Note (CRUD операции)
 │   ├── Dockerfile            # Docker-образ для backend
 │   ├── requirements.txt      # Python зависимости
 │   ├── .env.example          # Шаблон переменных окружения
+│   ├── railway.json          # Railway deploy config
 │   └── tests/
 │       └── test_api.py       # Unit-тесты API (pytest)
 ├── frontend/                 # React приложение
@@ -138,13 +156,18 @@ docker-compose up --build
 │   │       ├── NoteList.jsx  # Список заметок
 │   │       └── TagFilter.jsx # Фильтр по тегам
 │   ├── Dockerfile            # Multi-stage сборка (node → nginx)
-│   ├── nginx.conf            # Nginx конфигурация (прокси API)
+│   ├── nginx.conf.template   # Nginx конфигурация (прокси API)
+│   ├── railway.json          # Railway deploy config
+│   ├── tailwind.config.js    # Tailwind CSS конфигурация
+│   ├── postcss.config.js     # PostCSS конфигурация
 │   └── package.json          # Node.js зависимости
 ├── .github/workflows/
 │   ├── ci.yml                # CI pipeline (lint, test, docker build)
-│   └── cd.yml                # CD pipeline (deploy, отчет)
-├── docker-compose.yml        # Оркестрация контейнеров
+│   └── cd.yml.disabled       # CD (заменён на Railway Autodeploy)
+├── docker-compose.yml        # Оркестрация 3 контейнеров (PG + backend + frontend)
 ├── .eslintrc.js              # ESLint конфигурация
 ├── .gitignore                # Игнорируемые файлы
+├── generate_report.py        # Генератор отчёта
+├── railway.json              # Railway root config
 └── README.md                 # Документация проекта
 ```
